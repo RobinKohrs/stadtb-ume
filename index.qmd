@@ -165,7 +165,6 @@ geo_bk %>%
 ## Die 14 Bäume, die höher als 35 m sind
 
 ```{r}
-#| column: screen
 #| echo: false
 
 
@@ -173,6 +172,15 @@ geo_bk %>%
   filter(BAUMHOEHE_ == "> 35 m") -> hohe_baeume
 
 hohe_baeume %>% DT::datatable()
+```
+
+```{r}
+#| column: screen
+#| echo: false
+
+
+geo_bk %>% 
+  filter(BAUMHOEHE_ == "> 35 m") -> hohe_baeume
 
 hohe_baeume %>% 
   count(GATTUNG_AR) %>% nrow() -> n_classes
