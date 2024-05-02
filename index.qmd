@@ -263,6 +263,44 @@ write_sf(d_trees_per_person, op)
 
 ![Bäume pro EinwoherIn je Zähbezirk](images/qgis/trees_per_pers_zbez.png)
 
+# Welche Bäume über die Zeit gepflanzt werden
+
+```{r}
+#| column: page
+#| message: false
+#| echo: false
+#| fig-width: 30
+#| fig-height: 20
+
+data_with_decade = geo_bk %>% 
+  st_drop_geometry() %>% 
+  filter(PFLANZJAHR != 0) %>% 
+  mutate(
+    decade = (PFLANZJAHR %/% 10) * 10
+  )
+
+
+data_with_decade %>% 
+  st_drop_geometry() %>% 
+  filter(decade=="2020") %>% 
+  group_by(GATTUNG_AR) %>% 
+  summarise(n=n()) %>% 
+  arrange(desc(n)) %>% 
+  slice_head(n=7) %>% pull(GATTUNG_AR) -> data_top_7_in_2020
+
+
+data_with_decade %>% 
+  filter(GATTUNG_AR %in% data_top_7_in_2020) %>% 
+  group_by(decade, GATTUNG_AR) %>% 
+  summarise(n=n()) %>% 
+  ggplot(aes(decade, n, color=GATTUNG_AR)) +
+  labs(y = "Bäume pro Dekade", x="Dekade") +
+  scale_x_continuous(labels=function(x)paste0(x, "'s"), breaks=seq(1850,2020, by=20)) +
+  geom_line(show.legend = T, width=3) +
+  geom_point(size=4) +
+  theme(legend.position = "bottom")
+  
+```
 
 
 
