@@ -160,7 +160,9 @@ geo_bk %>%
   
 ```
 
-# Die 14 Bäume, die höher als 35 m sind
+# Höhe
+
+## Die 14 Bäume, die höher als 35 m sind
 
 ```{r}
 #| column: screen
@@ -169,6 +171,8 @@ geo_bk %>%
 
 geo_bk %>% 
   filter(BAUMHOEHE_ == "> 35 m") -> hohe_baeume
+
+hohe_baeume %>% DT::datatable()
 
 hohe_baeume %>% 
   count(GATTUNG_AR) %>% nrow() -> n_classes
@@ -180,8 +184,20 @@ mapview::mapview(hohe_baeume, zcol="GATTUNG_AR", col.regions=cls)
 
 ```
 
+# Alter
 
-# Die 10 ältesten Bäume
+
+## Die 10 ältesten Bäume
+
+```{r}
+#| echo: false
+geo_bk %>% 
+  filter(PFLANZJAHR != 0) %>% 
+  arrange(PFLANZJAHR) %>% 
+  slice_head(n=10) %>% 
+  DT::datatable()
+
+```
 
 ```{r}
 #| column: screen
