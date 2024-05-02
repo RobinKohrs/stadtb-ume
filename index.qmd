@@ -1,0 +1,248 @@
+---
+title: "Stadtbäume in Wien"
+bibliography: refs.bib
+csl: german-council-of-economic-experts.csl
+lang: de
+date: today
+format:
+  html:
+    toc: true
+    toc-location: body
+    toc-title: Übersicht
+    cold-fold: true
+    css: style.css
+    theme: cosmo   # cosmo bootswatch theme
+---
+
+```{r}
+#| echo: false
+#| message: false
+
+library(tidyverse)
+library(here)
+library(glue)
+library(sf)
+library(rajudas)
+library(jsonlite)
+library(DT)
+library(tidytext)
+library(plotly)  
+library(RColorBrewer)  
+```
+
+```{r}
+#| cache: true
+#| echo: false
+#| message: false
+
+# where the qmd lives
+here::i_am("stadtBaeumeR/quarto/index.qmd")
+
+# paths
+path_baumkataster = here("data_raw/baumkataster_wien/BAUMKATOGD/BAUMKATOGDPoint.shp")
+path_wald_wien = here("data_raw/wald_wien.gpkg")
+path_wiener_bezirke = here("data_raw/wien_bezirke.gpkg")
+path_zbez = here("data_raw/zählbezirksgrenzen/ZAEHLBEZIRKOGD/ZAEHLBEZIRKOGDPolygon.shp")
+path_pop_zbez = here("data_raw/bevölkerung_wien/bev_wien_zaehlbezirke_seit_2008.csv")
+
+# data
+geo_bk = read_sf(path_baumkataster, options = "ENCODING=WINDOWS-1252")
+geo_wald = read_sf(path_wald_wien)
+geo_wiener_bezirke = read_sf(path_wiener_bezirke) %>% st_transform(crs=st_crs(geo_bk))
+geo_wiener_zbez = read_sf(path_zbez)
+data_pop_zbez = read_delim(path_pop_zbez, delim = ";", skip = 1)
+
+
+# ggplo theme
+ggplot2::theme_set(theme_minimal(base_size = 20))
+```
+
+
+
+# Die häufigsten Baumarten
+
+
+## Insgesamt
+
+```{r}
+#| echo: false
+
+geo_bk %>% 
+  st_drop_geometry() %>% 
+  select(GATTUNG_AR) %>% 
+  count(GATTUNG_AR, sort=T) %>% 
+  rename(anzahl_in_baumkataster = n) %>% 
+  DT::datatable()
+```
+
+## Je Bezirk
+
+### die 5 häufigsten Baumarten je Bezirk
+
+```{r}
+#| echo: false
+#| fig-width: 32
+#| fig-height: 20
+#| column: screen
+geo_bk %>%
+  st_drop_geometry() %>%
+  group_by(BEZIRK) %>%
+  count(GATTUNG_AR, sort=T) %>% 
+  slice_head(n=5) %>% 
+  arrange(desc(n), .by_group=T) %>% 
+  mutate(
+    name = str_extract(GATTUNG_AR, "(?<=\\()[^)]*"),
+    name = reorder_within(name, n, BEZIRK, sep = ""),
+    first = row_number() == 1
+  ) %>% 
+  ggplot(aes(n, name, fill=first) ) +
+  scale_fill_manual(values = c("TRUE" = "#ff6347", "FALSE"= "lightgrey")) +
+  labs(title = "Häufigsten Baumarten je Bezirk") +
+  geom_col(show.legend = F) +
+  facet_wrap(~BEZIRK, scales = "free_y") +
+  geom_text(aes(x=0, label=n, hjust=0)) 
+
+
+```
+
+### Wie oft ist eine Baumart die häufigste in einem Bezirk
+
+```{r}
+#| echo: false
+
+geo_bk %>% 
+  st_drop_geometry() %>% 
+  filter(!is.na(BEZIRK)) %>% 
+  group_by(BEZIRK) %>%
+  count(GATTUNG_AR, sort=T) %>% 
+  arrange(desc(n), .by_group=T) %>% 
+  slice_head(n=1) %>% 
+  ungroup() %>% 
+  count(GATTUNG_AR) %>% 
+  rename(
+    "Bezirke wo dies der häufigste Baum ist" = n
+  ) %>% DT::datatable()
+```
+
+## Zählsprengel die als häufigste Baumart eine Baumart haben, die sonst nirgends die häufigste Baumart ist
+
+```{r}
+#| fig-width: 32
+#| fig-height: 32
+#| column: screen
+#| echo: false
+#| message: false
+
+row_zbez = st_within(geo_bk, geo_wiener_zbez) %>% as.numeric()
+geo_bk = geo_bk %>% 
+  mutate(
+    zbez = geo_wiener_zbez$ZBEZ[row_zbez]
+  ) 
+
+
+geo_bk[["zbez"]] = geo_wiener_zbez$ZBEZ[row_zbez]
+
+geo_bk %>% 
+  st_drop_geometry() %>% 
+  group_by(zbez) %>% 
+  count(GATTUNG_AR, sort=T) %>% 
+  arrange(desc(n), .by_group=T) %>% 
+  slice_head(n=1) %>% 
+  group_by(GATTUNG_AR) %>% 
+  summarise(
+    n = n(),
+    first_zbez = first(zbez)
+  ) %>% 
+  filter(n==1) %>% 
+  {
+  left_join(geo_wiener_zbez, ., join_by(ZBEZ==first_zbez))
+  } %>% mapview::mapview(zcol="GATTUNG_AR", legend=F)
+  
+```
+
+# Die 14 Bäume, die höher als 35 m sind
+
+```{r}
+#| column: screen
+#| echo: false
+
+
+geo_bk %>% 
+  filter(BAUMHOEHE_ == "> 35 m") -> hohe_baeume
+
+hohe_baeume %>% 
+  count(GATTUNG_AR) %>% nrow() -> n_classes
+
+cls = brewer.pal(n_classes, "Set2")
+
+mapview::mapview(hohe_baeume, zcol="GATTUNG_AR", col.regions=cls)
+  
+
+```
+
+
+# Die 10 ältesten Bäume
+
+```{r}
+#| column: screen
+#| echo: false
+geo_bk %>% 
+  filter(PFLANZJAHR != 0) %>% 
+  arrange(PFLANZJAHR) %>% 
+  slice_head(n=10) -> data_aeltesten_baeume
+
+data_aeltesten_baeume %>% 
+  count(GATTUNG_AR) %>% 
+  nrow() -> n_classes_alter
+
+
+cls = brewer.pal(n_classes_alter, "Set2")
+
+mapview::mapview(data_aeltesten_baeume, zcol="PFLANZJAHR")
+```
+
+# Bäume pro Einwohner (in Zählbezirken)
+
+```{r}
+#| echo: false
+data_pop_zbez %>% 
+  rowwise() %>% 
+  mutate(
+    pop =  AUT + FOR
+  ) %>% 
+  group_by(SUB_DISTRICT_CODE, REF_DATE) %>% 
+  summarise(
+    pop = sum(pop)
+  ) %>% ungroup() %>% 
+  filter(REF_DATE == "20230101") %>% 
+  mutate(SUB_DISTRICT_CODE = str_sub(SUB_DISTRICT_CODE, 2,5)) -> data_pop_zbez
+  
+geo_bk %>% 
+  st_drop_geometry() %>% 
+  group_by(zbez) %>% 
+  summarise(n_trees=n()) %>% 
+  {
+    left_join(geo_wiener_zbez, ., join_by(ZBEZ==zbez))
+  } %>% 
+  left_join(
+    data_pop_zbez, join_by(ZBEZ==SUB_DISTRICT_CODE)
+  ) %>% 
+  mutate(
+    trees_per_person = n_trees / pop
+  ) -> d_trees_per_person
+
+
+op = makePath(here("output/trees_per_person_zbez/trees_per_person_zbez.gpkg"))
+write_sf(d_trees_per_person, op)
+
+```
+
+![Bäume pro EinwoherIn je Zähbezirk](images/qgis/trees_per_pers_zbez.png)
+
+
+
+
+
+
+
+
