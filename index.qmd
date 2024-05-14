@@ -9,7 +9,7 @@ format:
     toc: true
     toc-location: body
     toc-title: Übersicht
-    cold-fold: true
+    code-fold: true
     css: style.css
     theme: cosmo   # cosmo bootswatch theme
 ---
@@ -54,9 +54,14 @@ data_pop_zbez = read_delim(path_pop_zbez, delim = ";", skip = 1)
 
 
 # ggplo theme
-ggplot2::theme_set(theme_minimal(base_size = 20))
+ggplot2::theme_set(theme_light())
+
 ```
 
+
+<div class='highlight'>  
+Insgesamt sind im Baumkataster der Stadt wien <strong>224.025</strong> Bäume eingetragen.
+</div>
 
 
 # Die häufigsten Baumarten
@@ -73,6 +78,24 @@ geo_bk %>%
   count(GATTUNG_AR, sort=T) %>% 
   rename(anzahl_in_baumkataster = n) %>% 
   DT::datatable()
+```
+```{r}
+#| column: page
+#| fig-width: 20
+#| fig-height: 18
+
+geo_bk %>% 
+  st_drop_geometry() %>% 
+  count(GATTUNG_AR, sort = T) %>% 
+  slice_head(n=10) %>% 
+  mutate(
+    GATTUNG_AR = fct_reorder(GATTUNG_AR, n, .desc = T)
+  ) %>% 
+  ggplot(aes(GATTUNG_AR, n)) +
+  geom_col() +
+  labs(x=NULL, y=NULL) +
+  theme(axis.text.x = element_text(angle=90, size = 20))
+  
 ```
 
 ## Je Bezirk
@@ -263,7 +286,23 @@ write_sf(d_trees_per_person, op)
 
 ![Bäume pro EinwoherIn je Zähbezirk](images/qgis/trees_per_pers_zbez.png)
 
+```{r}
+d_trees_per_person %>% 
+  ggplot(aes(pop, trees_per_person)) +
+  geom_point() +
+  scale_y_log10() +
+  theme_light() -> p
+
+ggplotly(p)
+```
+
+
 # Welche Bäume über die Zeit gepflanzt werden
+
+<div class='highlight'>  
+  Anscheinend wurde der derzeit häufigst existierende Baum in Wien, der Spitzahorn,
+</div>
+
 
 ```{r}
 #| column: page
@@ -294,14 +333,50 @@ data_with_decade %>%
   group_by(decade, GATTUNG_AR) %>% 
   summarise(n=n()) %>% 
   ggplot(aes(decade, n, color=GATTUNG_AR)) +
-  labs(y = "Bäume pro Dekade", x="Dekade") +
+  labs(y = "Bäume pro Dekade", x="Dekade", caption = "Ausgewählt wurden die Top-7 Baumarten in der Dekade 2020") +
   scale_x_continuous(labels=function(x)paste0(x, "'s"), breaks=seq(1850,2020, by=20)) +
-  geom_line(show.legend = T, width=3) +
+  geom_line(show.legend = T, linewidth=3) +
   geom_point(size=4) +
-  theme(legend.position = "bottom")
+  theme_light(base_size = 30) +
+  theme(legend.position = "bottom",
+        legend.text = element_text(size=20))
   
 ```
 
+```{r}
+#| column: page
+#| message: false
+#| echo: false
+#| fig-width: 30
+#| fig-height: 20
+
+data_with_decade %>% 
+  group_by(GATTUNG_AR, decade) %>% 
+  summarise(
+    n_per_decade = n()
+  ) %>% 
+  ungroup() %>% 
+  group_by(GATTUNG_AR) %>% 
+  mutate(index = if_else(decade == min(decade),
+                         1,
+                         n_per_decade / n_per_decade[decade == min(decade)])) %>% 
+  mutate(
+    is_spitzahorn = if_else(GATTUNG_AR == "Acer platanoides (Spitzahorn)", T, F)
+  ) -> data_spitzahorn
+
+# data_spitzahorn %>% filter(is_spitzahorn) %>% View
+
+data_spitzahorn %>% 
+  ggplot(aes(decade, index, color=is_spitzahorn, group=GATTUNG_AR, alpha=is_spitzahorn)) +
+  geom_line(linewidth=3) +
+  labs(title="Der Spitzhorn wurde besonders in den 90ern gepflanzt", color=NULL, alpha=NULL) +
+  guides(alpha="none") +
+  theme_light(base_size = 30) +
+  scale_color_manual(values=c("FALSE" = "grey", "TRUE" = "darkred"), labels=c("TRUE" = "Spitzahorn", "FALSE" = "anderen")) + theme(legend.position = "bottom")
+  
+
+
+```
 
 
 
